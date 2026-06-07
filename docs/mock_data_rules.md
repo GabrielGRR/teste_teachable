@@ -65,7 +65,8 @@ As compras base devem ser distribuídas nas seguintes taxas de status final:
 - **10%** terminam como `REEMBOLSADA`
 
 > [!IMPORTANT]
-> Todas as compras com status final `APROVADA`, `CANCELADA` e `REEMBOLSADA` devem ter obrigatoriamente evoluído a partir do status inicial `INICIADA`.
+> 1. Todas as compras com status final `APROVADA`, `CANCELADA` e `REEMBOLSADA` devem ter obrigatoriamente evoluído a partir do status inicial `INICIADA`.
+> 2. Todas as compras `REEMBOLSADA` DEVEM ter recebido o status `APROVADA` anteriormente.
 
 ---
 
@@ -97,6 +98,4 @@ O gerador deve exportar **4 arquivos CSV** simulando as tabelas extraídas via C
 - Cenários CDC podem gerar eventos duplicados ou atrasados.
 
 ### 🔹 Tabela: `order_transaction_cost_hist`
-- Deve possuir integridade referencial com `purchase.purchase_id`.
-- Os valores devem representar as taxas e custos associados à transação de compra.
-- Pode receber eventos atrasados (*late arrival*).
+- Não deve ser adicionada.
