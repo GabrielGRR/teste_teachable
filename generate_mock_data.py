@@ -69,15 +69,14 @@ def determine_purchase_status(order_date):
         return "REEMBOLSADA", order_date + timedelta(days=random.randint(0, 5))
 
 
-def CDC_apply_duplicity(purchase_events, product_item_events, purchase_extra_events, cost_events):
+def CDC_apply_duplicity(purchase_events, product_item_events, purchase_extra_events):
     # Duplicate every event exactly
     purchase_events.extend([dict(ev) for ev in purchase_events])
     product_item_events.extend([dict(ev) for ev in product_item_events])
     purchase_extra_events.extend([dict(ev) for ev in purchase_extra_events])
-    cost_events.extend([dict(ev) for ev in cost_events])
 
 
-def CDC_apply_correction(purchase_events, product_item_events, purchase_extra_events, cost_events, product_id, prod_item_id, order_date):
+def CDC_apply_correction(purchase_events, product_item_events, purchase_extra_events, product_id, prod_item_id, order_date):
     # Retrieve the last events to get current state
     last_p = purchase_events[-1]
     last_item = product_item_events[-1]
@@ -112,20 +111,9 @@ def CDC_apply_correction(purchase_events, product_item_events, purchase_extra_ev
         "transaction_date": correction_time.date()
     })
     product_item_events.append(corr_item)
-    
-    # 6. Generate new cost event
-    last_cost = cost_events[-1]
-    corr_cost = dict(last_cost)
-    corr_cost.update({
-        "order_transaction_cost_vat_value": round(new_total_value * 0.12, 2),
-        "order_transaction_cost_installment_value": round(new_total_value * 0.03, 2),
-        "transaction_datetime": correction_time,
-        "transaction_date": correction_time.date()
-    })
-    cost_events.append(corr_cost)
 
 
-def CDC_apply_late_arrival(purchase_events, product_item_events, purchase_extra_events, cost_events, order_date, release_date):
+def CDC_apply_late_arrival(purchase_events, product_item_events, purchase_extra_events, order_date, release_date):
     # Determine the latest business date to base delay on
     dates_to_compare = [order_date]
     if release_date is not None:
@@ -146,12 +134,9 @@ def CDC_apply_late_arrival(purchase_events, product_item_events, purchase_extra_
     purchase_events[0]["transaction_datetime"] = new_time
     purchase_events[0]["transaction_date"] = new_date
     
-    # Delay the initial events of extra_info and cost tables
+    # Delay the initial event of extra_info table
     purchase_extra_events[0]["transaction_datetime"] = new_time
     purchase_extra_events[0]["transaction_date"] = new_date
-    
-    cost_events[0]["transaction_datetime"] = new_time
-    cost_events[0]["transaction_date"] = new_date
 
 
 def generate_single_purchase_flow(purchase_id, buyer_id):
@@ -186,20 +171,53 @@ def generate_single_purchase_flow(purchase_id, buyer_id):
 
     if final_status != "INICIADA":
         event_time_2 = event_time + timedelta(minutes=random.randint(1, 20))
-        purchase_events.append({
-            "purchase_id": purchase_id,
-            "buyer_id": buyer_id,
-            "prod_item_id": prod_item_id,
-            "order_date": order_date,
-            "release_date": release_date,
-            "producer_id": producer_id,
-            "purchase_partition": PARTITION,
-            "prod_item_partition": PARTITION,
-            "purchase_total_value": total_value,
-            "purchase_status": final_status,
-            "transaction_datetime": event_time_2,
-            "transaction_date": event_time_2.date()
-        })
+
+        # REEMBOLSADA must go through APROVADA first
+        if final_status == "REEMBOLSADA":
+            purchase_events.append({
+                "purchase_id": purchase_id,
+                "buyer_id": buyer_id,
+                "prod_item_id": prod_item_id,
+                "order_date": order_date,
+                "release_date": release_date,
+                "producer_id": producer_id,
+                "purchase_partition": PARTITION,
+                "prod_item_partition": PARTITION,
+                "purchase_total_value": total_value,
+                "purchase_status": "APROVADA",
+                "transaction_datetime": event_time_2,
+                "transaction_date": event_time_2.date()
+            })
+            event_time_3 = event_time_2 + timedelta(minutes=random.randint(1, 20))
+            purchase_events.append({
+                "purchase_id": purchase_id,
+                "buyer_id": buyer_id,
+                "prod_item_id": prod_item_id,
+                "order_date": order_date,
+                "release_date": release_date,
+                "producer_id": producer_id,
+                "purchase_partition": PARTITION,
+                "prod_item_partition": PARTITION,
+                "purchase_total_value": total_value,
+                "purchase_status": "REEMBOLSADA",
+                "transaction_datetime": event_time_3,
+                "transaction_date": event_time_3.date()
+            })
+        else:
+            purchase_events.append({
+                "purchase_id": purchase_id,
+                "buyer_id": buyer_id,
+                "prod_item_id": prod_item_id,
+                "order_date": order_date,
+                "release_date": release_date,
+                "producer_id": producer_id,
+                "purchase_partition": PARTITION,
+                "prod_item_partition": PARTITION,
+                "purchase_total_value": total_value,
+                "purchase_status": final_status,
+                "transaction_datetime": event_time_2,
+                "transaction_date": event_time_2.date()
+            })
 
     product_item_events = [{
         "prod_item_id": prod_item_id,
@@ -219,31 +237,21 @@ def generate_single_purchase_flow(purchase_id, buyer_id):
         "transaction_date": event_time.date()
     }]
 
-    cost_events = [{
-        "purchase_id": purchase_id,
-        "purchase_partition": PARTITION,
-        "order_transaction_cost_vat_value": round(total_value * 0.12, 2),
-        "order_transaction_cost_installment_value": round(total_value * 0.03, 2),
-        "order_transaction_cost_date": order_date,
-        "transaction_datetime": event_time,
-        "transaction_date": event_time.date()
-    }]
-
     # CDC Scenario decision (20% of purchases)
     scenario_type = None
     if random.random() < 0.20:
         cdc_bucket = random.random()
         if cdc_bucket < 0.25:
             scenario_type = "Duplicidade"
-            CDC_apply_duplicity(purchase_events, product_item_events, purchase_extra_events, cost_events)
+            CDC_apply_duplicity(purchase_events, product_item_events, purchase_extra_events)
         elif cdc_bucket < 0.50:
             scenario_type = "Correção Histórica"
-            CDC_apply_correction(purchase_events, product_item_events, purchase_extra_events, cost_events, product_id, prod_item_id, order_date)
+            CDC_apply_correction(purchase_events, product_item_events, purchase_extra_events, product_id, prod_item_id, order_date)
         else:
             scenario_type = "Evento Fora de Ordem"
-            CDC_apply_late_arrival(purchase_events, product_item_events, purchase_extra_events, cost_events, order_date, release_date)
+            CDC_apply_late_arrival(purchase_events, product_item_events, purchase_extra_events, order_date, release_date)
 
-    return purchase_events, product_item_events, purchase_extra_events, cost_events, scenario_type
+    return purchase_events, product_item_events, purchase_extra_events, scenario_type
 
 
 def generate_data():
@@ -252,7 +260,6 @@ def generate_data():
     purchase_rows = []
     product_item_rows = []
     purchase_extra_rows = []
-    cost_rows = []
 
     existing_buyers = []
     
@@ -266,12 +273,11 @@ def generate_data():
     for purchase_id in range(1, N_PURCHASES + 1):
         buyer_id = get_buyer_id(purchase_id, existing_buyers)
         
-        p_events, p_items, p_extras, p_costs, scenario_type = generate_single_purchase_flow(purchase_id, buyer_id)
+        p_events, p_items, p_extras, scenario_type = generate_single_purchase_flow(purchase_id, buyer_id)
         
         purchase_rows.extend(p_events)
         product_item_rows.extend(p_items)
         purchase_extra_rows.extend(p_extras)
-        cost_rows.extend(p_costs)
 
         if scenario_type:
             scenario_counts[scenario_type] += 1
@@ -285,24 +291,21 @@ def generate_data():
     purchase_df = pd.DataFrame(purchase_rows)
     product_item_df = pd.DataFrame(product_item_rows)
     purchase_extra_df = pd.DataFrame(purchase_extra_rows)
-    cost_df = pd.DataFrame(cost_rows)
 
     total_mutations = sum(scenario_counts.values())
     print(f"Resumo da geração:")
     print(f"  - purchase: {len(purchase_df)} linhas")
     print(f"  - product_item: {len(product_item_df)} linhas")
     print(f"  - purchase_extra: {len(purchase_extra_df)} linhas")
-    print(f"  - cost: {len(cost_df)} linhas")
     print(f"Distribuição de cenários CDC aplicados (Total: {total_mutations} compras afetadas, ~{total_mutations/N_PURCHASES*100:.1f}%):")
     for scen, count in scenario_counts.items():
         pct = (count / total_mutations * 100) if total_mutations > 0 else 0.0
         print(f"  - {scen}: {count} ({pct:.1f}%)")
 
-    return purchase_df, product_item_df, purchase_extra_df, cost_df
+    return purchase_df, product_item_df, purchase_extra_df
 
 
-def save_data(purchase_df, product_item_df, purchase_extra_df, cost_df):
-    # Save outputs to mock_user_data directory relative to script
+def save_data(purchase_df, product_item_df, purchase_extra_df):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     output_dir = os.path.join(script_dir, "mock_user_data")
     os.makedirs(output_dir, exist_ok=True)
@@ -312,11 +315,10 @@ def save_data(purchase_df, product_item_df, purchase_extra_df, cost_df):
     purchase_df.to_csv(os.path.join(output_dir, "purchase.csv"), index=False)
     product_item_df.to_csv(os.path.join(output_dir, "product_item.csv"), index=False)
     purchase_extra_df.to_csv(os.path.join(output_dir, "purchase_extra_info.csv"), index=False)
-    cost_df.to_csv(os.path.join(output_dir, "order_transaction_cost_hist.csv"), index=False)
 
     print("Todos os arquivos foram gravados com sucesso!")
 
 
 if __name__ == "__main__":
-    purchase_df, product_item_df, purchase_extra_df, cost_df = generate_data()
-    save_data(purchase_df, product_item_df, purchase_extra_df, cost_df)
+    purchase_df, product_item_df, purchase_extra_df = generate_data()
+    save_data(purchase_df, product_item_df, purchase_extra_df)
