@@ -50,33 +50,23 @@ def compute_daily_gmv(conn: duckdb.DuckDBPyConnection, start_date: date, end_dat
 
 
 def export_daily_gmv(conn: duckdb.DuckDBPyConnection) -> None:
-    dates = conn.execute("""
-        SELECT DISTINCT date FROM daily_gmv ORDER BY 1
-    """).fetchall()
-
-    exported = 0
-    skipped  = 0
+    dates = conn.execute("SELECT DISTINCT date FROM daily_gmv ORDER BY 1").fetchall()
 
     for (dt,) in dates:
         partition_dir = GOLD_DIR / str(dt)
 
         if partition_dir.exists():
-            skipped += 1
+            # Caso a partição já existe, não recria
             continue
 
         partition_dir.mkdir(parents=True, exist_ok=True)
-        output_file = partition_dir / "data.parquet"
 
         conn.execute(f"""
-            COPY (
-                SELECT * FROM daily_gmv
-                WHERE date = '{dt}'
-            )
-            TO '{output_file.as_posix()}' (FORMAT PARQUET)
+            COPY (SELECT * FROM daily_gmv WHERE date = '{dt}')
+            TO '{(partition_dir / 'data.parquet').as_posix()}' (FORMAT PARQUET)
         """)
-        exported += 1
 
-    logger.info(f"Gold exportada: {exported} dias novos | {skipped} dias já existentes (skipped)")
+        logger.info(f"Partição {dt} exportada")
 
 
 def main(start_date: date, end_date: date) -> None:

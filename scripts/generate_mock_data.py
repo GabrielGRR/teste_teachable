@@ -245,22 +245,21 @@ def generate_data(start_date, end_date):
         if scenario_type:
             scenario_counts[scenario_type] += 1
 
-        # Print de progresso a cada 20% do total
-        if purchase_id % (N_PURCHASES // 5) == 0:
+        # Print de progresso a cada 25% do total
+        if purchase_id % (N_PURCHASES // 4) == 0:
             pct = int((purchase_id / N_PURCHASES) * 100)
             logger.info(f"  Progresso: {pct}% concluído ({purchase_id}/{N_PURCHASES} compras)...")
 
     logger.info("Geração concluída. Montando DataFrames...")
+
     purchase_df = pd.DataFrame(purchase_rows)
     product_item_df = pd.DataFrame(product_item_rows)
     purchase_extra_df = pd.DataFrame(purchase_extra_rows)
 
     total_mutations = sum(scenario_counts.values())
-    logger.info(f"Resumo da geração:")
-    logger.info(f"  - purchase: {len(purchase_df)} linhas")
-    logger.info(f"  - product_item: {len(product_item_df)} linhas")
-    logger.info(f"  - purchase_extra: {len(purchase_extra_df)} linhas")
+    
     logger.info(f"Distribuição de cenários CDC aplicados (Total: {total_mutations} compras afetadas, ~{total_mutations/N_PURCHASES*100:.1f}%):")
+
     for scen, count in scenario_counts.items():
         pct = (count / total_mutations * 100) if total_mutations > 0 else 0.0
         logger.info(f"  - {scen}: {count} ({pct:.1f}%)")
