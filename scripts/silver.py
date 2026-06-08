@@ -1,15 +1,13 @@
-from pathlib import Path
 import duckdb
+
 from utils.logging_utils import get_logger, setup_logging
+from utils import PATH_DB_FILE, PATH_SILVER_DIR, PATH_BRONZE_DIR
 
 logger = get_logger(__name__)
 
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-DB_FILE = PROJECT_ROOT / "data" / "teachable.duckdb"
-SILVER_DIR = PROJECT_ROOT / "data" / "silver"
-BRONZE_DIR = PROJECT_ROOT / "data" / "bronze"
+DB_FILE    = PATH_DB_FILE
+SILVER_DIR = PATH_SILVER_DIR
+BRONZE_DIR = PATH_BRONZE_DIR
 
 SILVER_DIR.mkdir(parents=True, exist_ok=True)
 

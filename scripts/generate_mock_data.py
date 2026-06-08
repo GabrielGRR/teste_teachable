@@ -1,13 +1,16 @@
-import os
 import random
 from datetime import datetime, timedelta
 import pandas as pd
+
 from utils.logging_utils import get_logger, setup_logging
+from utils import PATH_BRONZE_DIR
 
 logger = get_logger(__name__)
 
 # Constants (Config)
 random.seed(30)
+
+BRONZE_DIR = PATH_BRONZE_DIR
 
 PRODUCTS_ID = list(range(5001, 5026))
 
@@ -34,9 +37,9 @@ def producer_from_product(product_id):
     raise ValueError(product_id)
 
 
-def random_date(START_DATE, END_DATE):
-    days = (END_DATE - START_DATE).days
-    return START_DATE + timedelta(days=random.randint(0, days))
+def random_date(start_date, end_date):
+    days = (end_date - start_date).days
+    return start_date + timedelta(days=random.randint(0, days))
 
 
 def lake_timestamp(base_date):
@@ -132,7 +135,7 @@ def CDC_apply_late_arrival(purchase_events, product_item_events, purchase_extra_
     purchase_extra_events[0]["transaction_date"] = new_date
 
 
-def generate_single_purchase_flow(START_DATE, END_DATE, purchase_id, buyer_id):
+def generate_single_purchase_flow(start_date, end_date, purchase_id, buyer_id):
     prod_item_id = purchase_id
     product_id = random.choice(PRODUCTS_ID)
     producer_id = producer_from_product(product_id)
@@ -140,7 +143,7 @@ def generate_single_purchase_flow(START_DATE, END_DATE, purchase_id, buyer_id):
     qty = random.randint(1, 6)
     total_value = PRODUCT_PRICE * qty
 
-    order_date = random_date(START_DATE, END_DATE)
+    order_date = random_date(start_date, end_date)
     final_status, release_date = determine_purchase_status(order_date)
 
     # Initial event timestamp
@@ -214,7 +217,7 @@ def generate_single_purchase_flow(START_DATE, END_DATE, purchase_id, buyer_id):
     return purchase_events, product_item_events, purchase_extra_events, scenario_type
 
 
-def generate_data(START_DATE, END_DATE):
+def generate_data(start_date, end_date):
     logger.info(f"Iniciando a geração de dados. Total planejado: {N_PURCHASES} compras base.")
     
     purchase_rows = []
@@ -233,7 +236,7 @@ def generate_data(START_DATE, END_DATE):
     for purchase_id in range(1, N_PURCHASES + 1):
         buyer_id = get_buyer_id(purchase_id, existing_buyers)
         
-        p_events, p_items, p_extras, scenario_type = generate_single_purchase_flow(START_DATE, END_DATE, purchase_id, buyer_id)
+        p_events, p_items, p_extras, scenario_type = generate_single_purchase_flow(start_date, end_date, purchase_id, buyer_id)
         
         purchase_rows.extend(p_events)
         product_item_rows.extend(p_items)
@@ -266,23 +269,20 @@ def generate_data(START_DATE, END_DATE):
 
 
 def save_data(purchase_df, product_item_df, purchase_extra_df):
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    output_dir = os.path.join(script_dir, "../data/bronze")
-    os.makedirs(output_dir, exist_ok=True)
+    BRONZE_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Salvando CSVs em: {BRONZE_DIR}")
 
-    logger.info(f"Salvando arquivos CSV em: {output_dir} ...")
-    
-    purchase_df.to_csv(os.path.join(output_dir, "purchase.csv"), index=False)
-    product_item_df.to_csv(os.path.join(output_dir, "product_item.csv"), index=False)
-    purchase_extra_df.to_csv(os.path.join(output_dir, "purchase_extra_info.csv"), index=False)
+    purchase_df.to_csv(BRONZE_DIR / "purchase.csv", index=False)
+    product_item_df.to_csv(BRONZE_DIR / "product_item.csv", index=False)
+    purchase_extra_df.to_csv(BRONZE_DIR / "purchase_extra_info.csv", index=False)
 
-    logger.info("Todos os arquivos foram gravados com sucesso!")
+    logger.info("Arquivos gravados com sucesso.")
 
 
-def main(START_DATE, END_DATE):
+def main(start_date, end_date):
     setup_logging()
 
-    purchase_df, product_item_df, purchase_extra_df = generate_data(START_DATE, END_DATE)
+    purchase_df, product_item_df, purchase_extra_df = generate_data(start_date, end_date)
     save_data(purchase_df, product_item_df, purchase_extra_df)
 
 

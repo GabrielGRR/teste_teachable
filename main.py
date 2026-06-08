@@ -1,5 +1,7 @@
 from datetime import date
+from utils import *
 from utils.logging_utils import get_logger, setup_logging, log_current_step, yesterday
+
 import scripts.generate_mock_data as generate_mock_data
 import scripts.silver as silver
 import scripts.gold as gold
@@ -8,7 +10,6 @@ logger = get_logger(__name__)
 
 START_DATE=date(2026, 1, 1)
 END_DATE=yesterday()
-
 
 def main():
     setup_logging()
