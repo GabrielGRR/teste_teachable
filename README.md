@@ -139,20 +139,28 @@ All three medallion layers would be stored in **Amazon S3**. DuckDB supports rea
 
 ### **DAG**
 
-Airflow would orchestrate the execution of these scripts via cron jobs and listeners on the bronze layer. The structure would look something like:
+The pipeline is split into two DAGs to balance cost and freshness:
+
+**`bronze_silver_pipeline`** — runs hourly throughout the day, absorbing late arrivals as they land in S3. Bronze ingestion and silver deduplication are lightweight operations that can run frequently without significant cost.
+
+**`gold_pipeline`** — runs once daily after the ingestion window closes. Before aggregating, it checks whether the silver pipeline completed successfully for that day using an `ExternalTaskSensor`. The gold layer only runs if silver is confirmed healthy — avoiding partial or incorrect aggregations.
 
 ```python
-@dag(
-    schedule="0 9 * * *",     # daily at 06h (America/Sao_Paulo) = 09h UTC
-    catchup=True,             # automatically reprocesses late arrivals
-)
-def teachable_pipeline():
-    wait_for_bronze = S3KeySensor(
-        task_id="wait_for_bronze",
-        bucket_key="bronze/{{ ds }}/*.csv",
+# Processes events throughout the day
+@dag(schedule="0 * * * *")
+def bronze_silver_pipeline():
+    wait_for_bronze >> run_silver
+
+# Aggregates GMV once daily after silver is confirmed healthy
+@dag(schedule="0 9 * * *")   # 06h BRT = 09h UTC
+def gold_pipeline():
+    wait_for_silver = ExternalTaskSensor(
+        task_id="wait_for_silver",
+        external_dag_id="bronze_silver_pipeline",
+        external_task_id="run_silver",
     )
 
-    wait_for_bronze >> run_silver >> run_gold
+    wait_for_silver >> run_gold
 ```
 
 - **`S3KeySensor`** — waits for the day's CSVs or parquets to arrive in the bucket before starting
