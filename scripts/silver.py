@@ -27,9 +27,11 @@ def load_bronze(conn: duckdb.DuckDBPyConnection) -> None:
         count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         logger.info(f"Bronze carregada: {table_name} ({count} linhas)")
 
-def create_purchase_clean(conn: duckdb.DuckDBPyConnection) -> None:
+def create_clean_table(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(f"""
         CREATE OR REPLACE TABLE purchase_clean AS
+
+        -- 1. Remove duplicatas e executa correção histórica
 
         WITH purchase_dedup AS (
             SELECT *
@@ -70,6 +72,8 @@ def create_purchase_clean(conn: duckdb.DuckDBPyConnection) -> None:
             WHERE rn = 1
         )
 
+        -- 2. Realiza o JOIN entre as tabelas
+
         SELECT
             p.purchase_id,
             p.buyer_id,
@@ -106,7 +110,7 @@ def create_purchase_clean(conn: duckdb.DuckDBPyConnection) -> None:
     logger.info(f"Tabela purchase_clean criada com sucesso: {conn.execute('SELECT COUNT(*) FROM purchase_clean').fetchone()[0]} linhas")
 
 
-def export_purchase_clean(conn: duckdb.DuckDBPyConnection) -> None:
+def export_clean_table(conn: duckdb.DuckDBPyConnection) -> None:
     output_file = SILVER_DIR / "purchase_clean.parquet"
 
     conn.execute(f"""
@@ -123,8 +127,8 @@ def main() -> None:
 
     conn = duckdb.connect(DB_FILE)
     load_bronze(conn)
-    create_purchase_clean(conn)
-    export_purchase_clean(conn)
+    create_clean_table(conn)
+    export_clean_table(conn)
 
     conn.close()
 
